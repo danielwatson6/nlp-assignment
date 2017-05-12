@@ -20,7 +20,7 @@ the directory specified as --data_dir and tokenize it in a very basic way,
 and then start training a model saving checkpoints to --train_dir.
 
 Running with --decode starts an interactive loop so you can see how
-the current checkpoint translates English sentences into French.
+the current checkpoint translates Arabic sentences into English.
 
 See the following papers for more information on neural translation models.
  * http://arxiv.org/abs/1409.3215
@@ -48,7 +48,7 @@ import seq2seq_model
 
 # Hyperparameters
 tf.app.flags.DEFINE_float("learning_rate", 1., "Learning rate.")
-tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
+tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.95,
                           "Learning rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
@@ -105,9 +105,6 @@ def read_data(source_path, target_path, max_size=None):
       counter = 0
       while source and target and (not max_size or counter < max_size):
         counter += 1
-        if counter % 10000 == 0:
-          print("  reading data line %d" % counter)
-          sys.stdout.flush()
         source_ids = [int(x) for x in source.split()]
         target_ids = [int(x) for x in target.split()]
         target_ids.append(data_utils.EOS_ID)
@@ -177,7 +174,7 @@ def train():
     current_step = 0
     previous_losses = []
     print("Entering training loop.")
-    while True:
+    while model.global_step.eval() <= 10000:
       # Choose a bucket according to data distribution. We pick a random number
       # in [0, 1] and use the corresponding interval in train_buckets_scale.
       random_number_01 = np.random.random_sample()
@@ -198,7 +195,7 @@ def train():
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-        print ("global step %d learning rate %.4f step-time %.2f perplexity "
+        print ("global step %d learning rate=%.4f step-time=%.2f perplexity="
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                          step_time, perplexity))
         # Decrease learning rate if no improvement was seen over last 3 times.
@@ -220,7 +217,7 @@ def train():
                                        target_weights, bucket_id, True)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
-          print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+          print("  eval: bucket %d perplexity=%.2f" % (bucket_id, eval_ppx))
         sys.stdout.flush()
 
 
@@ -231,12 +228,12 @@ def decode():
     model.batch_size = 1  # We decode one sentence at a time.
 
     # Load vocabularies.
-    en_vocab_path = os.path.join(FLAGS.data_dir,
+    ar_vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.from" % FLAGS.from_vocab_size)
-    fr_vocab_path = os.path.join(FLAGS.data_dir,
+    en_vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.to" % FLAGS.to_vocab_size)
-    en_vocab, _ = data_utils.initialize_vocabulary(en_vocab_path)
-    _, rev_fr_vocab = data_utils.initialize_vocabulary(fr_vocab_path)
+    ar_vocab, _ = data_utils.initialize_vocabulary(ar_vocab_path)
+    _, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
 
     # Decode from standard input.
     sys.stdout.write("> ")
@@ -244,7 +241,7 @@ def decode():
     sentence = sys.stdin.readline()
     while sentence:
       # Get token-ids for the input sentence.
-      token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), en_vocab)
+      token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), ar_vocab)
       # Which bucket does it belong to?
       bucket_id = len(_buckets) - 1
       for i, bucket in enumerate(_buckets):
@@ -265,8 +262,8 @@ def decode():
       # If there is an EOS symbol in outputs, cut them at that point.
       if data_utils.EOS_ID in outputs:
         outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-      # Print out French sentence corresponding to outputs.
-      print(" ".join([tf.compat.as_str(rev_fr_vocab[output]) for output in outputs]))
+      # Print out English sentence corresponding to outputs.
+      print(" ".join([tf.compat.as_str(rev_en_vocab[output]) for output in outputs]))
       print("> ", end="")
       sys.stdout.flush()
       sentence = sys.stdin.readline()
