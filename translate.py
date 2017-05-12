@@ -58,18 +58,19 @@ tf.app.flags.DEFINE_integer("size", 128, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
 # 79379 arabic words, 78841 english words (original)
 # 79379 arabic words, 39032 english words (tokenized lowercased)
-tf.app.flags.DEFINE_integer("from_vocab_size", 40000, "Arabic vocabulary size.")
+tf.app.flags.DEFINE_integer("from_vocab_size", 80000, "Arabic vocabulary size.")
 tf.app.flags.DEFINE_integer("to_vocab_size", 40000, "English vocabulary size.")
 # Here we choose data/original or data/tokenized
-tf.app.flags.DEFINE_string("data_dir", "data/original", "Data directory")
+tf.app.flags.DEFINE_string("data_dir", "data/tokenized", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "output/", "Training directory.")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
+# False for training
+tf.app.flags.DEFINE_boolean("decode", False,
+                            "Set to True for interactive decoding.")
 # Ignore these
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
-tf.app.flags.DEFINE_boolean("decode", False,
-                            "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
 

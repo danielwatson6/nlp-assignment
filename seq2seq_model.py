@@ -183,7 +183,10 @@ class Seq2SeqModel(object):
     if not forward_only:
       self.gradient_norms = []
       self.updates = []
-      opt = tf.train.GradientDescentOptimizer(self.learning_rate)
+      # If this is producing numerical stability issues, try this:
+      # (epsilon is a constant to prevent zero denominator, default 1e-8)
+      # opt = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-2)
+      opt = tf.train.AdamOptimizer(self.learning_rate)
       for b in xrange(len(buckets)):
         gradients = tf.gradients(self.losses[b], params)
         clipped_gradients, norm = tf.clip_by_global_norm(gradients,
