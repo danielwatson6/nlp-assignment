@@ -58,16 +58,16 @@ tf.app.flags.DEFINE_integer("size", 128, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
 # 79379 arabic words, 78841 english words (original)
 # 79379 arabic words, 39032 english words (tokenized lowercased)
-tf.app.flags.DEFINE_integer("from_vocab_size", 80000, "Arabic vocabulary size.")
+tf.app.flags.DEFINE_integer("from_vocab_size", 40000, "Arabic vocabulary size.")
 tf.app.flags.DEFINE_integer("to_vocab_size", 40000, "English vocabulary size.")
 # Here we choose data/original or data/tokenized
-tf.app.flags.DEFINE_string("data_dir", "data/tokenized", "Data directory")
+tf.app.flags.DEFINE_string("data_dir", "data/original", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "output/", "Training directory.")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 # False for training
-tf.app.flags.DEFINE_boolean("decode", False,
-                            "Set to True for interactive decoding.")
+tf.app.flags.DEFINE_string("decode", 'data/test/Test_data.mt05.src.ar',
+                            "Set to path for decoding a file.")
 # Ignore these
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
@@ -222,12 +222,12 @@ def train():
         sys.stdout.flush()
 
 
-def decode():
+def decode(source_path):
   with tf.Session() as sess:
     # Create model and load parameters.
     model = create_model(sess, True)
     model.batch_size = 1  # We decode one sentence at a time.
-
+    
     # Load vocabularies.
     ar_vocab_path = os.path.join(FLAGS.data_dir,
                                  "vocab%d.from" % FLAGS.from_vocab_size)
@@ -235,44 +235,41 @@ def decode():
                                  "vocab%d.to" % FLAGS.to_vocab_size)
     ar_vocab, _ = data_utils.initialize_vocabulary(ar_vocab_path)
     _, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
-
-    # Decode from standard input.
-    sys.stdout.write("> ")
-    sys.stdout.flush()
-    sentence = sys.stdin.readline()
-    while sentence:
-      # Get token-ids for the input sentence.
-      token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), ar_vocab)
-      # Which bucket does it belong to?
-      bucket_id = len(_buckets) - 1
-      for i, bucket in enumerate(_buckets):
-        if bucket[0] >= len(token_ids):
-          bucket_id = i
-          break
-      else:
-        logging.warning("Sentence truncated: %s", sentence)
-
-      # Get a 1-element batch to feed the sentence to the model.
-      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-          {bucket_id: [(token_ids, [])]}, bucket_id)
-      # Get output logits for the sentence.
-      _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True)
-      # This is a greedy decoder - outputs are just argmaxes of output_logits.
-      outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-      # If there is an EOS symbol in outputs, cut them at that point.
-      if data_utils.EOS_ID in outputs:
-        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-      # Print out English sentence corresponding to outputs.
-      print(" ".join([tf.compat.as_str(rev_en_vocab[output]) for output in outputs]))
-      print("> ", end="")
-      sys.stdout.flush()
-      sentence = sys.stdin.readline()
+    
+    with tf.gfile.GFile(source_path, mode="r") as source_file:
+      with tf.gfile.GFile(os.path.join(source_path[:-2] + 'en'), mode="w") as out_file:
+        counter = 0
+        sentence = source_file.readline()
+        while sentence:
+          # Get token-ids for the input sentence.
+          token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), ar_vocab)
+          # Which bucket does it belong to?
+          bucket_id = len(_buckets) - 1
+          for i, bucket in enumerate(_buckets):
+            if bucket[0] >= len(token_ids):
+              bucket_id = i
+              break
+          else:
+            logging.warning("Sentence truncated: %s", sentence)
+          
+          # Get a 1-element batch to feed the sentence to the model.
+          encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+              {bucket_id: [(token_ids, [])]}, bucket_id)
+          # Get output logits for the sentence.
+          _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                           target_weights, bucket_id, True)
+          # This is a greedy decoder - outputs are just argmaxes of output_logits.
+          outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+          # Get rid of special tokens
+          outputs = filter(lambda x: x > 3, outputs)
+          output_sentence = " ".join([tf.compat.as_str(rev_en_vocab[output]) for output in outputs])
+          out_file.write(output_sentence + '\n')
+          sentence = source_file.readline()
 
 
 def main(_):
   if FLAGS.decode:
-    decode()
+    decode(FLAGS.decode)
   else:
     train()
 
