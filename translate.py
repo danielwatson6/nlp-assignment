@@ -54,12 +54,12 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 20,
                             "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 256, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("size", 128, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
 # 79379 arabic words, 78841 english words (original)
 # 79379 arabic words, 39032 english words (tokenized lowercased)
-tf.app.flags.DEFINE_integer("from_vocab_size", 80000, "Arabic vocabulary size.")
-tf.app.flags.DEFINE_integer("to_vocab_size", 80000, "English vocabulary size.")
+tf.app.flags.DEFINE_integer("from_vocab_size", 40000, "Arabic vocabulary size.")
+tf.app.flags.DEFINE_integer("to_vocab_size", 40000, "English vocabulary size.")
 # Here we choose data/original or data/tokenized
 tf.app.flags.DEFINE_string("data_dir", "data/original", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "output/", "Training directory.")
@@ -70,8 +70,6 @@ tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
-tf.app.flags.DEFINE_boolean("self_test", False,
-                            "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
 
@@ -79,7 +77,8 @@ FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+#_buckets = [(102, 102)]
+_buckets = [(16, 17), (28, 31), (41, 46), (102, 102)]
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -106,7 +105,7 @@ def read_data(source_path, target_path, max_size=None):
       counter = 0
       while source and target and (not max_size or counter < max_size):
         counter += 1
-        if counter % 100000 == 0:
+        if counter % 10000 == 0:
           print("  reading data line %d" % counter)
           sys.stdout.flush()
         source_ids = [int(x) for x in source.split()]
@@ -117,6 +116,7 @@ def read_data(source_path, target_path, max_size=None):
             data_set[bucket_id].append([source_ids, target_ids])
             break
         source, target = source_file.readline(), target_file.readline()
+  print("Lines read:", counter)
   return data_set
 
 
@@ -152,9 +152,6 @@ def train():
       FLAGS.data_dir, FLAGS.from_vocab_size, FLAGS.to_vocab_size)
 
   with tf.Session() as sess:
-    # Create model.
-    print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-    model = create_model(sess, False)
 
     # Read data into buckets and compute their sizes.
     print ("Reading development and training data (limit: %d)."
@@ -163,17 +160,23 @@ def train():
     train_set = read_data(from_train, to_train, FLAGS.max_train_data_size)
     train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
     train_total_size = float(sum(train_bucket_sizes))
-
+    print("Train bucket sizes:", train_bucket_sizes)
+    print("Train data size:", train_total_size)
     # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
     # to select a bucket. Length of [scale[i], scale[i+1]] is proportional to
     # the size if i-th training bucket, as used later.
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                            for i in xrange(len(train_bucket_sizes))]
-
+    
+    # Create model.
+    print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
+    model = create_model(sess, False)
+    
     # This is the training loop.
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
+    print("Entering training loop.")
     while True:
       # Choose a bucket according to data distribution. We pick a random number
       # in [0, 1] and use the corresponding interval in train_buckets_scale.
@@ -269,30 +272,8 @@ def decode():
       sentence = sys.stdin.readline()
 
 
-def self_test():
-  """Test the translation model."""
-  with tf.Session() as sess:
-    print("Self-test for neural translation model.")
-    # Create model with vocabularies of 10, 2 small buckets, 2 layers of 32.
-    model = seq2seq_model.Seq2SeqModel(10, 10, [(3, 3), (6, 6)], 32, 2,
-                                       5.0, 32, 0.3, 0.99, num_samples=8)
-    sess.run(tf.global_variables_initializer())
-
-    # Fake data set for both the (3, 3) and (6, 6) bucket.
-    data_set = ([([1, 1], [2, 2]), ([3, 3], [4]), ([5], [6])],
-                [([1, 1, 1, 1, 1], [2, 2, 2, 2, 2]), ([3, 3, 3], [5, 6])])
-    for _ in xrange(5):  # Train the fake model for 5 steps.
-      bucket_id = random.choice([0, 1])
-      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-          data_set, bucket_id)
-      model.step(sess, encoder_inputs, decoder_inputs, target_weights,
-                 bucket_id, False)
-
-
 def main(_):
-  if FLAGS.self_test:
-    self_test()
-  elif FLAGS.decode:
+  if FLAGS.decode:
     decode()
   else:
     train()

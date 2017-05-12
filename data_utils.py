@@ -51,7 +51,7 @@ _WMT_ENFR_DEV_URL = "http://www.statmt.org/wmt15/dev-v2.tgz"
 
 
 def get_wmt_aren_train_set(directory):
-  return os.path.join('data', 'train')
+  return os.path.join(directory, 'train')
 
 
 def get_wmt_aren_dev_set(directory):
@@ -60,10 +60,11 @@ def get_wmt_aren_dev_set(directory):
 
 def basic_tokenizer(sentence):
   """Very basic tokenizer: split the sentence into a list of tokens."""
-  words = []
-  for space_separated_fragment in sentence.strip().split():
-    words.extend(_WORD_SPLIT.split(space_separated_fragment))
-  return [w for w in words if w]
+  return sentence.strip().split()
+  # words = []
+  # for space_separated_fragment in sentence.strip().split():
+  #   words.extend(_WORD_SPLIT.split(space_separated_fragment))
+  # return [w for w in words if w]
 
 
 def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
